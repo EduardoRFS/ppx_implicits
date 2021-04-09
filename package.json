@@ -1,0 +1,16 @@
+{
+  "name": "ppx_implicits",
+  "esy": {
+    "build": "dune build -p #{self.name}"
+  },
+  "dependencies": {
+    "@opam/reason": "3.7.0",
+    "@opam/dune": "^2.6.2",
+    "ocaml": "4.12.x",
+    "@opam/ppxlib": "*",
+    "@opam/ppx_deriving": "*"
+  },
+  "devDependencies": {
+    "@opam/ocaml-lsp-server": "*"
+  }
+}
