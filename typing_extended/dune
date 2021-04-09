@@ -1,0 +1,6 @@
+(library
+ (name ocaml_typing_extended)
+ (public_name ppx_implicits.ocaml_typing_extended)
+ (libraries ocaml_typing ppxlib)
+ (preprocess
+  (pps ppxlib.metaquot)))

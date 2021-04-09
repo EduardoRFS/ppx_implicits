@@ -1,0 +1,5 @@
+(library
+ (name ppx_implicits)
+ (public_name ppx_implicits)
+ (libraries ppxlib ocaml_typing_extended)
+ (kind ppx_rewriter))
