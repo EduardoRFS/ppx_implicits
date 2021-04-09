@@ -7,8 +7,7 @@
     "@opam/reason": "3.7.0",
     "@opam/dune": "^2.6.2",
     "ocaml": "4.12.x",
-    "@opam/ppxlib": "*",
-    "@opam/ppx_deriving": "*"
+    "@opam/ppxlib": "*"
   },
   "devDependencies": {
     "@opam/ocaml-lsp-server": "*",

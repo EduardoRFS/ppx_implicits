@@ -2,4 +2,4 @@
  (name test)
  (libraries lwt)
  (preprocess
-  (staged_pps ppx_implicits ppx_deriving.show)))
+  (staged_pps ppx_implicits)))
