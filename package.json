@@ -1,7 +1,8 @@
 {
   "name": "ppx_implicits",
   "esy": {
-    "build": "dune build -p #{self.name}"
+    "build": "dune build -p ppx_implicits",
+    "install": "esy-installer ppx_implicits.install"
   },
   "dependencies": {
     "@opam/reason": "3.7.0",
