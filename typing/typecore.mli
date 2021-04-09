@@ -48,6 +48,20 @@ type type_expected = private {
   explanation: type_forcing_context option;
 }
 
+val hack_pexp_fun:
+  (
+    (
+      Env.t ->
+      type_expected ->
+      Location.t ->
+      arg_label ->
+      Parsetree.pattern ->
+      Parsetree.expression ->
+      Typedtree.expression
+      as 'a
+    )  -> 'a
+  ) ref
+
 val mk_expected:
   ?explanation:type_forcing_context ->
   type_expr ->

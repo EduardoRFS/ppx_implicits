@@ -21,6 +21,14 @@ open Parsetree
 open Types
 open Format
 
+let hack_type_str_item:
+  (
+    (Env.t ->
+      Parsetree.structure_item ->
+      Typedtree.structure_item_desc * Types.signature_item list * Env.t as 'a) ->
+    'a
+  ) ref = ref (fun f env stri -> f env stri)
+
 module String = Misc.Stdlib.String
 
 module Sig_component_kind = struct
@@ -2422,6 +2430,7 @@ and type_structure ?(toplevel = false) funct_body anchor env sstr =
         Builtin_attributes.warning_attribute x;
         Tstr_attribute x, [], env
   in
+  let type_str_item = !hack_type_str_item type_str_item in
   let rec type_struct env sstr =
     match sstr with
     | [] -> ([], [], env)

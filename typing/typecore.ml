@@ -40,6 +40,34 @@ type type_expected = {
   explanation: type_forcing_context option;
 }
 
+let hack_pexp_fun:
+  (
+    (
+      Env.t ->
+      type_expected ->
+      Location.t ->
+      arg_label ->
+      Parsetree.pattern ->
+      Parsetree.expression ->
+      Typedtree.expression
+      as 'a
+    )  -> 'a
+  ) ref = ref (fun _ -> assert false)
+
+let hack_pexp_ident:
+  (
+    (
+      Env.t ->
+      Parsetree.expression ->
+      type_expected ->
+      (Typedtree.expression -> Typedtree.expression) ->
+      (Longident.t Location.loc) ->
+      Typedtree.expression
+      as 'a
+    )  -> 'a
+  ) ref = ref (fun _ -> assert false)
+
+
 module Datatype_kind = struct
   type t = Record | Variant
 
@@ -2722,8 +2750,10 @@ and type_expect_
       type_function ?in_function loc sexp.pexp_attributes env
                     ty_expected_explained l [Exp.case pat body]
   | Pexp_fun (l, None, spat, sbody) ->
+      !hack_pexp_fun (fun env ty_expected_explained loc l spat sbody ->
       type_function ?in_function loc sexp.pexp_attributes env
                     ty_expected_explained l [Ast_helper.Exp.case spat sbody]
+      ) env ty_expected_explained loc l spat sbody
   | Pexp_function caselist ->
       type_function ?in_function
         loc sexp.pexp_attributes env ty_expected_explained Nolabel caselist
