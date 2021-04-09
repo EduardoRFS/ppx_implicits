@@ -14,7 +14,26 @@ let env =
 let transform = str => {
   let env = Lazy.force_val(env);
   let (tstr, _, _, _) = Typemod.type_structure(env, str);
-  Untypeast.default_mapper.structure(Untypeast.default_mapper, tstr);
+  let mapper = {
+    ...Untypeast.default_mapper,
+    pat: (sub, pat) =>
+      // TODO: upstream this
+      switch (pat) {
+      | {
+          pat_extra: [(Typedtree.Tpat_open(_, lid, _), loc, attrs), ...rem],
+          _,
+        } =>
+        let loc = sub.location(sub, loc);
+        let attrs = sub.attributes(sub, attrs);
+        Ast_helper.Pat.mk(
+          ~loc,
+          ~attrs,
+          Ppat_open(lid, sub.pat(sub, {...pat, pat_extra: rem})),
+        );
+      | _ => Untypeast.default_mapper.pat(sub, pat)
+      },
+  };
+  mapper.structure(mapper, tstr);
 };
 
 let transform = str => {
