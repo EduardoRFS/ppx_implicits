@@ -116,8 +116,23 @@ val type_self_pattern:
 val check_partial:
         ?lev:int -> Env.t -> type_expr ->
         Location.t -> Typedtree.value Typedtree.case list -> Typedtree.partial
+type recarg =
+  | Allowed
+  | Required
+  | Rejected
+val hacked_texp_pack:
+  (?in_function:Warnings.loc * Types.type_expr ->
+   recarg:recarg ->
+   Env.t ->
+   type_expected ->
+   Parsetree.module_expr ->
+   Path.t ->
+   Longident.t list ->
+   Typedtree.expression option) ref
+
 val type_expect:
         ?in_function:(Location.t * type_expr) ->
+        ?recarg:recarg ->
         Env.t -> Parsetree.expression -> type_expected -> Typedtree.expression
 val type_exp:
         Env.t -> Parsetree.expression -> Typedtree.expression

@@ -1,6 +1,7 @@
 open Ocaml_typing;
 open Parsetree;
 open Typedtree;
+open Location;
 
 // declaration
 
@@ -252,3 +253,54 @@ let hack_type_str_item = (f, env, stri) => {
 
 Typecore.hack_pexp_fun := hack_pexp_fun;
 Typemod.hack_type_str_item := hack_type_str_item;
+
+// application
+let starts_with = (~pat, str) =>
+  String.length(str) >= String.length(pat)
+  && String.sub(str, 0, String.length(pat)) == pat;
+let includes_hkt_applied = expr => expr.Parsetree.pmod_attributes != []; // TODO: this is dumb
+let is_hkt_magic = path =>
+  switch (path) {
+  | Path.Pident(ident) => starts_with(~pat="HKT_Magic_", Ident.name(ident))
+  | _ => false
+  };
+
+let resolve_hkt_alias = (env, path) =>
+  is_hkt_magic(path)
+    ? switch (Env.find_modtype(path, env).mtd_type) {
+      | Some(
+          Mty_signature([
+            Sig_module(
+              _,
+              Mp_present,
+              {md_type: Mty_ident(path), _},
+              Trec_not,
+              Exported,
+            ),
+            ..._,
+          ]),
+        ) => path
+      | _ => path
+      }
+    : path;
+
+let unmodified_type_package = Typecore.type_package^;
+Typecore.hacked_texp_pack :=
+  (
+    // TODO: use lidents
+    (~in_function=?, ~recarg, env, ty_expected, modexpr, path, _lidents) => {
+      let.some () =
+        is_hkt_magic(path) && !includes_hkt_applied(modexpr) ? Some() : None;
+      let.some wrapped_mod =
+        Codegen_wrap_modexpr.wrap_modexpr(env, path, modexpr);
+      Some(
+        Typecore.type_expect(
+          ~in_function?,
+          ~recarg,
+          env,
+          wrapped_mod,
+          ty_expected,
+        ),
+      );
+    }
+  );

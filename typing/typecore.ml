@@ -217,6 +217,7 @@ type recarg =
   | Required
   | Rejected
 
+let hacked_texp_pack = ref (fun ?in_function:_ ~recarg:_ _ -> assert false)
 
 let mk_expected ?explanation ty = { ty; explanation; }
 
@@ -3619,6 +3620,9 @@ and type_expect_
         | _ ->
             raise (Error (loc, env, Not_a_packed_module ty_expected))
       in
+      (match !hacked_texp_pack ?in_function ~recarg env ty_expected_explained m p nl with
+      | Some exp -> exp
+      | None ->
       let (modl, tl') = !type_package env m p nl in
       rue {
         exp_desc = Texp_pack modl;
@@ -3626,6 +3630,7 @@ and type_expect_
         exp_type = newty (Tpackage (p, nl, tl'));
         exp_attributes = sexp.pexp_attributes;
         exp_env = env }
+      )
   | Pexp_open (od, e) ->
       let tv = newvar () in
       let (od, _, newenv) = !type_open_decl env od in
@@ -5616,6 +5621,8 @@ let () =
   ()
 
 (* drop ?recarg argument from the external API *)
+(*
 let type_expect ?in_function env e ty = type_expect ?in_function env e ty
+*)
 let type_exp env e = type_exp env e
 let type_argument env e t1 t2 = type_argument env e t1 t2
