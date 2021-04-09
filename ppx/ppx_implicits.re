@@ -17,6 +17,17 @@ let transform = str => {
   Untypeast.default_mapper.structure(Untypeast.default_mapper, tstr);
 };
 
+let transform = str => {
+  let is_ocamldep = Ocaml_common.Ast_mapper.tool_name() == "ocamldep";
+  if (is_ocamldep) {
+    str;
+  } else {
+    Ppxlib.Selected_ast.To_ocaml.copy_structure(str)
+    |> transform
+    |> Ppxlib.Selected_ast.Of_ocaml.copy_structure;
+  };
+};
+
 Driver.register_transformation(
   ~instrument=Driver.Instrument.make(~position=After, transform),
   "ppx_implicits",
