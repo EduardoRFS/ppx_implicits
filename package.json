@@ -11,6 +11,7 @@
     "@opam/ppx_deriving": "*"
   },
   "devDependencies": {
-    "@opam/ocaml-lsp-server": "*"
+    "@opam/ocaml-lsp-server": "*",
+    "@opam/lwt": "*"
   }
 }
