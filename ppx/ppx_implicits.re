@@ -27,6 +27,15 @@ let transform = str => {
         ] => sexp
       | _ => Untypeast.default_mapper.expr(super, expr)
       },
+    structure_item: (super, stri) =>
+      switch (stri.str_desc) {
+      | Tstr_attribute({
+          attr_name: {txt: "untype.data", _},
+          attr_payload: PStr([stri]),
+          _,
+        }) => stri
+      | _ => Untypeast.default_mapper.structure_item(super, stri)
+      },
     pat: (sub, pat) =>
       // TODO: upstream this
       switch (pat) {

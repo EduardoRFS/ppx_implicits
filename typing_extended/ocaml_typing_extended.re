@@ -7,6 +7,16 @@ open Location;
 
 let (let.some) = Option.bind;
 
+let snapshot = () => {
+  let bsnap = Btype.snapshot();
+  let clevels = Ctype.save_levels();
+  let restore = () => {
+    Btype.backtrack(bsnap);
+    Ctype.set_levels(clevels);
+  };
+  restore;
+};
+
 // code -> hacked typechecker and transform to classic -> untype -> (ocaml typechecker -> compile)
 
 module Env_stack = {
@@ -181,12 +191,7 @@ let hack_pexp_fun =
     };
   };
   let try_to_type_as_scoped_module = (mod_name, modtype, sbody) => {
-    let bsnap = Btype.snapshot();
-    let clevels = Ctype.save_levels();
-    let restore = () => {
-      Btype.backtrack(bsnap);
-      Ctype.set_levels(clevels);
-    };
+    let restore = snapshot();
     try((restore, try_to_type_as_scoped_module(mod_name, modtype, sbody))) {
     | _ => (restore, `Not_able_to_type)
     };
@@ -262,7 +267,25 @@ let hack_type_str_item = (f, env, stri) => {
    and if it is in a different str_item then it is below
    */
   Env_stack.push(~scope=Ctype.get_current_level(), stri.pstr_loc, env);
-  let (desc, desc_signature, env) = f(env, stri);
+  let restore = snapshot();
+  let (desc, desc_signature, env) =
+    try(f(env, stri)) {
+    | _exn =>
+      open Typedtree;
+      restore();
+      // structure type recovery
+      let loc = stri.pstr_loc;
+      let desc =
+        Tstr_attribute({
+          attr_name: {
+            loc,
+            txt: "untype.data",
+          },
+          attr_payload: PStr([stri]),
+          attr_loc: loc,
+        });
+      (desc, [], env);
+    };
   // switch (desc) {
   // | Tstr_value(_, [binding]) =>
   // TODO: add check to ensure they're "identical"
@@ -329,17 +352,16 @@ Typecore.hacked_texp_pack :=
     }
   );
 
-// type recovery
+// expression type recovery
 let hacked_type_expect = (f, env, sexp, ty_expected) => {
   open Parsetree;
   open Typedtree;
   open Types;
-  open Ctype;
   open Typecore;
-  let saved = save_levels();
+  let restore = snapshot();
   try(f(env, sexp, ty_expected)) {
   | _ =>
-    set_levels(saved);
+    restore();
     let loc = sexp.pexp_loc;
     {
       exp_desc:
