@@ -16,6 +16,17 @@ let transform = str => {
   let (tstr, _, _, _) = Typemod.type_structure(env, str);
   let mapper = {
     ...Untypeast.default_mapper,
+    expr: (super, expr) =>
+      switch (expr.exp_attributes) {
+      | [
+          {
+            attr_name: {txt: "untype.data", _},
+            attr_payload: PStr([{pstr_desc: Pstr_eval(sexp, []), _}]),
+            _,
+          },
+        ] => sexp
+      | _ => Untypeast.default_mapper.expr(super, expr)
+      },
     pat: (sub, pat) =>
       // TODO: upstream this
       switch (pat) {
@@ -33,7 +44,9 @@ let transform = str => {
       | _ => Untypeast.default_mapper.pat(sub, pat)
       },
   };
-  mapper.structure(mapper, tstr);
+  let str = mapper.structure(mapper, tstr);
+  // Format.printf("%a\n%!", Pprintast.structure, str);
+  str;
 };
 
 let transform = str => {

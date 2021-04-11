@@ -129,6 +129,13 @@ val hacked_texp_pack:
    Path.t ->
    Longident.t list ->
    Typedtree.expression option) ref
+val hacked_type_expect:
+  ((
+    Env.t ->
+    Parsetree.expression ->
+    type_expected ->
+    Typedtree.expression as 'a) ->
+    'a) ref
 
 val type_expect:
         ?in_function:(Location.t * type_expr) ->

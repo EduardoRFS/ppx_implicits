@@ -328,3 +328,48 @@ Typecore.hacked_texp_pack :=
       );
     }
   );
+
+// type recovery
+let hacked_type_expect = (f, env, sexp, ty_expected) => {
+  open Parsetree;
+  open Typedtree;
+  open Types;
+  open Ctype;
+  open Typecore;
+  let saved = save_levels();
+  try(f(env, sexp, ty_expected)) {
+  | _ =>
+    set_levels(saved);
+    let loc = sexp.pexp_loc;
+    {
+      exp_desc:
+        Texp_ident(
+          Path.Pident(Ident.create_local("*type-error*")),
+          Location.mkloc(Longident.Lident("*type-error*"), loc),
+          {
+            Types.val_type: ty_expected.ty,
+            val_kind: Val_reg,
+            val_loc: loc,
+            val_attributes: [],
+            val_uid: Uid.internal_not_actually_unique,
+          },
+        ),
+      exp_loc: loc,
+      exp_extra: [],
+      exp_type: ty_expected.ty,
+      exp_env: env,
+      exp_attributes: [
+        {
+          attr_name: {
+            loc,
+            txt: "untype.data",
+          },
+          attr_payload:
+            PStr([{pstr_loc: loc, pstr_desc: Pstr_eval(sexp, [])}]),
+          attr_loc: loc,
+        },
+      ],
+    };
+  };
+};
+Typecore.hacked_type_expect := hacked_type_expect;

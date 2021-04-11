@@ -39,7 +39,6 @@ type type_expected = {
   ty: type_expr;
   explanation: type_forcing_context option;
 }
-
 let hack_pexp_fun:
   (
     (
@@ -66,7 +65,7 @@ let hack_pexp_ident:
       as 'a
     )  -> 'a
   ) ref = ref (fun _ -> assert false)
-
+let hacked_type_expect = ref (fun _ -> assert false)
 
 module Datatype_kind = struct
   type t = Record | Variant
@@ -2596,7 +2595,9 @@ and type_expect ?in_function ?recarg env sexp ty_expected_explained =
   let exp =
     Builtin_attributes.warning_scope sexp.pexp_attributes
       (fun () ->
+        !hacked_type_expect (fun env sexp ty_expected_explained ->
          type_expect_ ?in_function ?recarg env sexp ty_expected_explained
+        ) env sexp ty_expected_explained
       )
   in
   Cmt_format.set_saved_types
@@ -4588,7 +4589,12 @@ and type_unpacks ?in_function env unpacks sbody expected_ty =
      in type_expect triggered by escaping identifiers from the local module
      and refine them into Scoping_let_module errors
   *)
+  (* Format.printf "%a\n%!" Printtyp.raw_type_expr expected_ty.ty; *)
+  (* Format.printf "%a\n%!" Pprintast.expression sbody; *)
+  (*  Format.printf "@[%i %i@ %a@]@." lev (get_current_level())
+    Printtyp.raw_type_expr ty_arg; *)
   let body = type_expect ?in_function extended_env sbody expected_ty in
+  (* print_endline "a"; *)
   let exp_loc = { body.exp_loc with loc_ghost = true } in
   let exp_attributes = [Ast_helper.Attr.mk (mknoloc "#modulepat") (PStr [])] in
   List.fold_left (fun body (id, name, pres, modl) ->
@@ -5151,6 +5157,9 @@ let type_expression env sexp =
   end_def();
   if maybe_expansive exp then lower_contravariant env exp.exp_type;
   generalize exp.exp_type;
+  match exp.exp_attributes with
+  | [ { attr_name = { txt = "untype.data"; _ }; _  } ] -> exp
+  | _ -> 
   match sexp.pexp_desc with
     Pexp_ident lid ->
       let loc = sexp.pexp_loc in
