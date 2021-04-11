@@ -6,6 +6,7 @@ open Location;
 // declaration
 
 let (let.some) = Option.bind;
+
 // code -> hacked typechecker and transform to classic -> untype -> (ocaml typechecker -> compile)
 
 module Env_stack = {
@@ -154,80 +155,103 @@ let hack_pexp_fun =
       spat: Parsetree.pattern,
       sbody,
     ) => {
-  // TODO: do I need to actually run copy_type_desc?
-  // TODO: also Ctype.save_levels
-  let snapshot = Btype.snapshot();
-  let snapshot_levels = Ctype.save_levels();
-
-  try({
-    let ty_expect_explained_clone =
-      Typecore.mk_expected(
-        ~explanation=?ty_expect_explained.Typecore.explanation,
-        clone_type_expr(ty_expect_explained.Typecore.ty),
+  let try_to_type_as_scoped_module = (mod_name, modtype, sbody) => {
+    open Ctype;
+    let mty_path =
+      Typetexp.transl_modtype_longident^(modtype.loc, env, modtype.txt);
+    let scope = Ctype.get_current_level();
+    begin_def();
+    let (_id, env) =
+      Env.enter_module(
+        ~scope=Ctype.get_current_level(),
+        ~arg=true,
+        mod_name,
+        Mp_present,
+        Mty_ident(mty_path),
+        env,
       );
-    let expr = f(env, ty_expect_explained_clone, exp_loc, l, spat, sbody);
-    Ctype.unify(env, ty_expect_explained.ty, ty_expect_explained_clone.ty);
-    expr;
-  }) {
-  | Typecore.Error(_loc, _env, Expr_type_clash([_, Escape(_)], _, _)) as exn =>
-    switch (spat.ppat_desc) {
-    | Ppat_constraint(
-        {
-          ppat_desc: Ppat_unpack({txt: Some(mod_id_name), loc: mod_id_loc}),
-          _,
+    // TODO: this is clearly a problem because of the type_expected stuff
+    // TODO: seriously this matters because it will reject valid code
+    let body = Typecore.type_expression(env, sbody);
+    let ty = body.exp_type;
+    end_def();
+    switch (check_scope_escape(env, scope, ty)) {
+    | _ => `Not_escaped
+    | exception _ => `Escaped(ty)
+    };
+  };
+  let try_to_type_as_scoped_module = (mod_name, modtype, sbody) => {
+    let bsnap = Btype.snapshot();
+    let clevels = Ctype.save_levels();
+    let restore = () => {
+      Btype.backtrack(bsnap);
+      Ctype.set_levels(clevels);
+    };
+    try((restore, try_to_type_as_scoped_module(mod_name, modtype, sbody))) {
+    | _ => (restore, `Not_able_to_type)
+    };
+  };
+
+  let type_escaped_ppat_unpack =
+      (restore, ty, mod_name, mod_name_loc, modtype, modtype_loc) => {
+    let mod_name = Location.{txt: mod_name, loc: mod_name_loc};
+    let (free_variables, signature) =
+      Codegen_wrapper_modtype.make_wrapper_signature({
+        pattern_loc: spat.ppat_loc,
+        param_name: mod_name,
+        param_modtype: modtype,
+        body_type: {
+          txt: ty,
+          loc: sbody.pexp_loc,
         },
-        {ptyp_desc: Ptyp_package((modtype_id, [])), ptyp_loc: typ_loc, _},
-      ) =>
-      Btype.backtrack(snapshot);
-      Ctype.set_levels(snapshot_levels);
-      let b = {
-        let (_, modtype_decl) =
-          Env.lookup_modtype(~loc=modtype_id.loc, modtype_id.txt, env);
-        let.some modtype = modtype_decl.mtd_type; // TODO: Option.get bad
-        switch (with_module(env, mod_id_name, modtype, sbody)) {
-        | {exp_type: typ, exp_loc: loc, _} =>
-          // Format.printf("%a\n%!", Printtyp.type_expr, typ);
-          let mod_name = Location.{txt: mod_id_name, loc: mod_id_loc};
-          let (free_variables, signature) =
-            Codegen_wrapper_modtype.make_wrapper_signature({
-              pattern_loc: spat.ppat_loc,
-              param_name: mod_name,
-              param_modtype: modtype_id,
-              body_type: {
-                txt: typ,
-                loc,
-              },
-            });
-          let (env, modtype_name) =
-            Env_stack.append_modtype(~loc=typ_loc, signature, env);
-          let fn =
-            Codegen_function_declaration.transform_function(
-              {
-                exp_loc,
-                pattern_loc: spat.ppat_loc,
-                body_loc: sbody.pexp_loc,
-                free_variables,
-                mod_name,
-                modtype_name: {
-                  txt: modtype_name,
-                  loc: typ_loc,
-                },
-              },
-              sbody,
-            );
-          // Format.printf("%a\n%!", Pprintast.expression, fn);
-          // TODO: is okay to store and restore like this?
-          // TODO: copy in_function here
-          Some(Typecore.type_expect(env, fn, ty_expect_explained));
-        | exception _ => None
-        };
-      };
-      switch (b) {
-      | Some(v) => v
-      | None => raise(exn)
-      };
-    | _ => raise(exn)
+      });
+
+    // if restored before, then transforming it into a core type will fail
+    restore();
+
+    let (env, modtype_name) =
+      Env_stack.append_modtype(~loc=modtype_loc, signature, env);
+    let fn =
+      Codegen_function_declaration.transform_function(
+        {
+          exp_loc,
+          pattern_loc: spat.ppat_loc,
+          body_loc: sbody.pexp_loc,
+          free_variables,
+          mod_name,
+          modtype_name: {
+            txt: modtype_name,
+            loc: modtype_loc,
+          },
+        },
+        sbody,
+      );
+    // TODO: copy in_function and recarg here
+    Typecore.type_expect(env, fn, ty_expect_explained);
+  };
+
+  switch (spat.ppat_desc) {
+  | Ppat_constraint(
+      {ppat_desc: Ppat_unpack({txt: Some(mod_name), loc: mod_name_loc}), _},
+      {ptyp_desc: Ptyp_package((modtype, [])), ptyp_loc: modtyp_loc, _},
+    ) =>
+    switch (try_to_type_as_scoped_module(mod_name, modtype, sbody)) {
+    | (restore, `Not_able_to_type)
+    // TODO: not_escaped needs to type again? I think so, because the error message
+    | (restore, `Not_escaped) =>
+      restore();
+      f(env, ty_expect_explained, exp_loc, l, spat, sbody);
+    | (restore, `Escaped(ty)) =>
+      type_escaped_ppat_unpack(
+        restore,
+        ty,
+        mod_name,
+        mod_name_loc,
+        modtype,
+        modtyp_loc,
+      )
     }
+  | _ => f(env, ty_expect_explained, exp_loc, l, spat, sbody)
   };
 };
 
