@@ -432,6 +432,69 @@ Typecore.hacked_texp_pack :=
     }
   );
 
+let rec path_starts_with = (~pat, path) =>
+  switch (path) {
+  | Path.Pident(ident) => starts_with(~pat, Ident.name(ident))
+  | Path.Pdot(_, ident) => starts_with(~pat, ident)
+  | Path.Papply(_, path) => path_starts_with(~pat, path)
+  };
+Printexc.record_backtrace(true);
+Typecore.hacked_pexp_ident :=
+  (
+    (f, env, lid, in_function, recarg, sexp, ty_expected_explained) =>
+      try(
+        {
+          if (sexp.pexp_attributes
+              |> List.exists(attr => attr.attr_name.txt == "hkt_applied")) {
+            raise(Not_found);
+          };
+          let (_t, desc) = Typecore.type_ident(env, ~recarg, lid);
+          let typ = Ctype.full_expand(env, desc.val_type);
+          let typ_path =
+            switch (typ.desc) {
+            | Types.Tconstr(path, _, _)
+                when path_starts_with(~pat="hkt_magic_", path) => path
+            | _ => raise(Not_found)
+            };
+          let run_lbl =
+            switch (Env.find_type(typ_path, env).type_kind) {
+            | Type_record([run_lbl], _) => run_lbl
+            | _ => raise(Not_found)
+            };
+          let expr =
+            Ppxlib.Ast_builder.Default.(
+              pexp_field(
+                ~loc=sexp.pexp_loc,
+                {
+                  ...sexp,
+                  pexp_attributes: [
+                    attribute(
+                      ~loc=sexp.pexp_loc,
+                      ~name={txt: "hkt_applied", loc: sexp.pexp_loc},
+                      ~payload=PStr([]),
+                    ),
+                    ...sexp.pexp_attributes,
+                  ],
+                },
+                {
+                  txt: Lident(Ident.name(run_lbl.ld_id)),
+                  loc: sexp.pexp_loc,
+                },
+              )
+            );
+          Typecore.type_expect(
+            ~in_function?,
+            ~recarg,
+            env,
+            expr,
+            ty_expected_explained,
+          );
+        }
+      ) {
+      | _exn => f(env, lid, in_function, recarg, sexp, ty_expected_explained)
+      }
+  );
+
 // types
 
 Typetexp.hacked_ptyp_arrow :=
