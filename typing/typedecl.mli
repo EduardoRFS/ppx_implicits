@@ -104,3 +104,7 @@ type error =
 exception Error of Location.t * error
 
 val report_error: formatter -> error -> unit
+
+val transl_declaration : Env.t ->
+    Parsetree.type_declaration ->
+    Ident.t * Types.Uid.t -> Typedtree.type_declaration
