@@ -36,16 +36,57 @@ module Env_stack = {
           | `Type(Typedtree.type_declaration, Types.type_declaration)
         ],
       ),
+    mutable types_to_collect:
+      list(
+        [
+          | `Modtype(
+              Typedtree.module_type_declaration,
+              Types.modtype_declaration,
+            )
+          | `Type(Typedtree.type_declaration, Types.type_declaration)
+        ],
+      ),
   };
   type t = Stack.t(data);
 
   let stack = Stack.create();
 
+  let push_modtype = (decl, typ) => {
+    let data = Stack.top(stack);
+    data.additional_structures = [
+      `Modtype((decl, typ)),
+      ...data.additional_structures,
+    ];
+    data.types_to_collect = [
+      `Modtype((decl, typ)),
+      ...data.types_to_collect,
+    ];
+  };
+  let push_type = (decl, typ) => {
+    let data = Stack.top(stack);
+    data.additional_structures = [
+      `Type((decl, typ)),
+      ...data.additional_structures,
+    ];
+    data.types_to_collect = [`Type((decl, typ)), ...data.types_to_collect];
+  };
   let push = (~scope, binding_loc, source_env) =>
     Stack.push(
-      {scope, binding_loc, source_env, additional_structures: []},
+      {
+        scope,
+        binding_loc,
+        source_env,
+        additional_structures: [],
+        types_to_collect: [],
+      },
       stack,
     );
+  let collect_types = () => {
+    let data = Stack.top(stack);
+    let types = data.types_to_collect;
+    data.types_to_collect = [];
+    types;
+  };
   let append_modtype = (~loc, signature, env) => {
     let data = Stack.top(stack);
     let name = Printf.sprintf("HKT_Magic_%d", last_modtype^);
@@ -88,13 +129,10 @@ module Env_stack = {
       mtd_attributes: [],
       mtd_loc: loc,
     };
-    data.additional_structures = [
-      `Modtype((tree_modtype_decl, modtype_decl)),
-      ...data.additional_structures,
-    ];
+    push_modtype(tree_modtype_decl, modtype_decl);
     (env, name);
   };
-  Printexc.record_backtrace(true);
+
   let append_type = (~loc, free_variables, wrapper_modtype, env) => {
     let data = Stack.top(stack);
     let id = last_modtype^;
@@ -107,9 +145,10 @@ module Env_stack = {
         ~wrapper_modtype,
         ~free_variables,
       );
+    let record_name = decl.ptype_name.txt;
     let run_name = label_decl.pld_name;
 
-    let id = Ident.create_scoped(~scope=data.scope, decl.ptype_name.txt);
+    let id = Ident.create_scoped(~scope=data.scope, record_name);
     let uid = Types.Uid.mk(~current_unit=Env.get_unit_name());
     // Format.printf(
     //   "%a\n%!",
@@ -121,11 +160,8 @@ module Env_stack = {
     let typ = decl.typ_type;
     data.source_env = Env.add_type(~check=true, id, typ, data.source_env);
     let env = Env.add_type(~check=true, id, typ, env);
-    data.additional_structures = [
-      `Type((decl, typ)),
-      ...data.additional_structures,
-    ];
-    (env, run_name);
+    push_type(decl, typ);
+    (env, record_name, run_name);
   };
 
   let pop = (desc, desc_signature, env) => {
@@ -272,15 +308,14 @@ let hack_pexp_fun =
   let type_escaped_ppat_unpack =
       (restore, ty, mod_name, mod_name_loc, modtype, modtype_loc) => {
     let mod_name = Location.{txt: mod_name, loc: mod_name_loc};
+    let return_signature =
+      Types_to_coretype.to_coretype(~loc=sbody.pexp_loc, ty);
     let (free_variables, signature) =
       Codegen_wrapper_modtype.make_wrapper_signature({
         pattern_loc: spat.ppat_loc,
         param_name: mod_name,
         param_modtype: modtype,
-        body_type: {
-          txt: ty,
-          loc: sbody.pexp_loc,
-        },
+        return_signature,
       });
 
     // if restored before, then transforming it into a core type will fail
@@ -288,7 +323,7 @@ let hack_pexp_fun =
 
     let (env, modtype_name) =
       Env_stack.append_modtype(~loc=modtype_loc, signature, env);
-    let (env, run_name) =
+    let (env, _record_name, run_name) =
       Env_stack.append_type(
         ~loc=modtype_loc,
         free_variables,
@@ -351,6 +386,7 @@ let hack_type_str_item = (f, env, stri) => {
   let (desc, desc_signature, env) =
     try(f(env, stri)) {
     | _exn =>
+      Printexc.print_backtrace(stdout);
       open Typedtree;
       restore();
       // structure type recovery
@@ -438,7 +474,7 @@ let rec path_starts_with = (~pat, path) =>
   | Path.Pdot(_, ident) => starts_with(~pat, ident)
   | Path.Papply(_, path) => path_starts_with(~pat, path)
   };
-Printexc.record_backtrace(true);
+
 Typecore.hacked_pexp_ident :=
   (
     (f, env, lid, in_function, recarg, sexp, ty_expected_explained) =>
@@ -460,6 +496,10 @@ Typecore.hacked_pexp_ident :=
             switch (Env.find_type(typ_path, env).type_kind) {
             | Type_record([run_lbl], _) => run_lbl
             | _ => raise(Not_found)
+            | exception exn =>
+              Printexc.print_backtrace(stdout);
+              Printf.printf("bug %s\n%!", Path.name(typ_path));
+              raise(exn);
             };
           let expr =
             Ppxlib.Ast_builder.Default.(
@@ -496,10 +536,98 @@ Typecore.hacked_pexp_ident :=
   );
 
 // types
+let hacked_ptyp_arrow = (f, env, policy, label, st1, st2) =>
+  // Format.printf(
+  //   "%a -> %a\n%!",
+  //   Pprintast.core_type,
+  //   st1,
+  //   Pprintast.core_type,
+  //   st2,
+  // );
+  try({
+    let modtype =
+      switch (st1.ptyp_desc) {
+      | Ptyp_package((modtype, [])) => modtype
+      | _ => raise(Not_found)
+      };
+    let mod_name =
+      switch (st1.ptyp_attributes) {
+      | [
+          {
+            attr_name: {txt: "id", _},
+            attr_payload:
+              PStr([
+                {
+                  pstr_desc:
+                    Pstr_eval(
+                      {
+                        pexp_desc:
+                          Pexp_construct({txt: Lident(modname), loc}, None),
+                        _,
+                      },
+                      [],
+                    ),
+                  _,
+                },
+              ]),
+            _,
+          },
+        ] => {
+          txt: modname,
+          loc,
+        }
+      | _ => raise(Not_found)
+      };
+    let (free_variables, signature) =
+      Codegen_wrapper_modtype.make_wrapper_signature({
+        pattern_loc: st1.ptyp_loc,
+        param_name: mod_name,
+        param_modtype: modtype,
+        return_signature: st2,
+      });
 
-Typetexp.hacked_ptyp_arrow :=
-  ((f, env, policy, label, st1, st2) => f(env, policy, label, st1, st2));
+    let (env, modtype_name) =
+      Env_stack.append_modtype(~loc=modtype.loc, signature, env);
+    let (env, record_name, _) =
+      Env_stack.append_type(
+        ~loc=modtype.loc,
+        free_variables,
+        modtype_name,
+        env,
+      );
+    let loc = st1.ptyp_loc;
+    let typ =
+      Ppxlib.Ast_builder.Default.(
+        ptyp_constr(
+          ~loc,
+          {txt: Lident(record_name), loc},
+          free_variables
+          |> List.map(({txt: name, loc}) => ptyp_var(~loc, name)),
+        )
+      );
 
+    Typetexp.transl_type(env, policy, typ);
+  }) {
+  | _exn => f(env, policy, label, st1, st2)
+  };
+Typetexp.hacked_ptyp_arrow := hacked_ptyp_arrow;
+
+let hacked_ppat_contraint_collect_types = env => {
+  env :=
+    Env_stack.collect_types()
+    |> List.rev
+    |> List.fold_left(
+         (env, typ) =>
+           switch (typ) {
+           | `Modtype({mtd_id, _}, typ) => Env.add_modtype(mtd_id, typ, env)
+           | `Type({typ_id, _}, typ) =>
+             Env.add_type(~check=true, typ_id, typ, env)
+           },
+         env^,
+       );
+};
+Typecore.hacked_ppat_contraint_collect_types :=
+  hacked_ppat_contraint_collect_types;
 // expression type recovery
 let hacked_type_expect = (f, env, sexp, ty_expected) => {
   open Parsetree;

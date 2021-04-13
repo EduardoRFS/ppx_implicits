@@ -3,6 +3,7 @@ open Ocaml_common;
 include Ocaml_typing_extended;
 open Ocaml_typing;
 
+Printexc.record_backtrace(true);
 let env =
   lazy(
     {

@@ -41,11 +41,11 @@ type config = {
   pattern_loc: Location.t,
   param_name: loc(string),
   param_modtype: loc(Longident.t),
-  body_type: loc(Types.type_expr),
+  return_signature: core_type,
 };
 
 let make_wrapper_signature =
-    ({pattern_loc, param_name, param_modtype, body_type}) => {
+    ({pattern_loc, param_name, param_modtype, return_signature}) => {
   open Ast_builder.Default;
 
   // this means that most operations locs are derived from the full pattern loc
@@ -60,8 +60,6 @@ let make_wrapper_signature =
       ),
     );
   };
-  let return_signature =
-    Types_to_coretype.to_coretype(~loc=body_type.loc, body_type.txt);
   let free_variables = find_free_variables(return_signature);
   let free_variables_alias =
     free_variables

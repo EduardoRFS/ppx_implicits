@@ -66,6 +66,7 @@ let hack_pexp_ident:
     )  -> 'a
   ) ref = ref (fun _ -> assert false)
 let hacked_type_expect = ref (fun _ -> assert false)
+let hacked_ppat_contraint_collect_types = ref (fun _ -> assert false)
 
 module Datatype_kind = struct
   type t = Record | Variant
@@ -1845,6 +1846,7 @@ and type_pat_aux
       end_def();
       generalize_structure ty;
       let ty, expected_ty' = instance ty, ty in
+      !hacked_ppat_contraint_collect_types env;
       unify_pat_types ~refine loc env ty (instance expected_ty);
       type_pat category sp expected_ty' (fun p ->
         (*Format.printf "%a@.%a@."

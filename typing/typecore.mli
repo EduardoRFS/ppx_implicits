@@ -148,6 +148,7 @@ val type_ident:
   Env.t ->
   ?recarg:recarg ->
   Longident.t Location.loc -> Path.t * Types.value_description
+val hacked_ppat_contraint_collect_types: (Env.t ref -> unit) ref
 
 val type_expect:
         ?in_function:(Location.t * type_expr) ->

@@ -20,3 +20,20 @@ let bind_lwt = (v, f) => bind((module Lwt), v, f);
 
 let apply = (f, a) => f(a);
 let some_6 = apply(map, (module Option), (+)(1), Some(5));
+
+let apply_bind =
+    (
+      bind: ([@id M] (module Monad), M.t('b), 'b => M.t('c)) => M.t('c),
+      md,
+      v,
+      f,
+    ) =>
+  bind(md, v, f);
+
+module type Type = {type t;};
+let poly = (f: ([@id T] (module Type), T.t, T.t) => T.t) => (
+  f((module Int), 1, 2),
+  f((module Bool), true, false),
+);
+
+let choose_fst = (module T: Type, x: T.t, _y: T.t) => x;
