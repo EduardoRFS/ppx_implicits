@@ -136,6 +136,18 @@ val hacked_type_expect:
     type_expected ->
     Typedtree.expression as 'a) ->
     'a) ref
+val hacked_pexp_ident:
+  (((Env.t ->
+    Longident.t Location.loc ->
+    (Warnings.loc * Types.type_expr) option ->
+    recarg ->
+    Parsetree.expression ->
+    type_expected ->
+    Typedtree.expression) as 'a) -> 'a) ref
+val type_ident:
+  Env.t ->
+  ?recarg:recarg ->
+  Longident.t Location.loc -> Path.t * Types.value_description
 
 val type_expect:
         ?in_function:(Location.t * type_expr) ->

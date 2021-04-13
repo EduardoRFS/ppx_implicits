@@ -216,6 +216,7 @@ type recarg =
   | Required
   | Rejected
 
+let hacked_pexp_ident = ref (fun _ -> assert false)
 let hacked_texp_pack = ref (fun ?in_function:_ ~recarg:_ _ -> assert false)
 
 let mk_expected ?explanation ty = { ty; explanation; }
@@ -2628,6 +2629,7 @@ and type_expect_
   in
   match sexp.pexp_desc with
   | Pexp_ident lid ->
+      !hacked_pexp_ident (fun env lid in_function recarg sexp ty_expected_explained ->
       let path, desc = type_ident env ~recarg lid in
       let exp_desc =
         match desc.val_kind with
@@ -2653,6 +2655,7 @@ and type_expect_
         exp_type = instance desc.val_type;
         exp_attributes = sexp.pexp_attributes;
         exp_env = env }
+      ) env lid in_function recarg sexp ty_expected_explained
   | Pexp_constant(Pconst_string (str, _, _) as cst) -> (
     let cst = constant_or_raise env loc cst in
     (* Terrible hack for format strings *)
@@ -5157,15 +5160,18 @@ let type_expression env sexp =
   end_def();
   if maybe_expansive exp then lower_contravariant env exp.exp_type;
   generalize exp.exp_type;
-  match exp.exp_attributes with
-  | [ { attr_name = { txt = "untype.data"; _ }; _  } ] -> exp
-  | _ -> 
+  match exp.exp_attributes, exp.exp_desc with
+  | [ { attr_name = { txt = "untype.data"; _ }; _  } ], _ -> exp
+  | _, Texp_ident _
+  | _, Texp_instvar _ -> (
   match sexp.pexp_desc with
     Pexp_ident lid ->
       let loc = sexp.pexp_loc in
       (* Special case for keeping type variables when looking-up a variable *)
       let (_path, desc) = Env.lookup_value ~use:false ~loc lid.txt env in
       {exp with exp_type = desc.val_type}
+  | _ -> exp
+  )
   | _ -> exp
 
 (* Error report *)
