@@ -161,6 +161,8 @@ let new_pre_univar ?name () =
 
 type policy = Fixed | Extensible | Univars
 
+let hacked_ptyp_arrow = ref (fun _ -> assert false)
+
 let rec transl_type env policy styp =
   Builtin_attributes.warning_scope styp.ptyp_attributes
     (fun () -> transl_type_aux env policy styp)
@@ -198,6 +200,7 @@ and transl_type_aux env policy styp =
     in
     ctyp (Ttyp_var name) ty
   | Ptyp_arrow(l, st1, st2) ->
+    !hacked_ptyp_arrow (fun env policy l st1 st2 ->
     let cty1 = transl_type env policy st1 in
     let cty2 = transl_type env policy st2 in
     let ty1 = cty1.ctyp_type in
@@ -207,6 +210,7 @@ and transl_type_aux env policy styp =
       else ty1 in
     let ty = newty (Tarrow(l, ty1, cty2.ctyp_type, Cok)) in
     ctyp (Ttyp_arrow (l, cty1, cty2)) ty
+    ) env policy l st1 st2
   | Ptyp_tuple stl ->
     assert (List.length stl >= 2);
     let ctys = List.map (transl_type env policy) stl in

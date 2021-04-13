@@ -77,3 +77,17 @@ val create_package_mty:
     Location.t -> Env.t -> Parsetree.package_type ->
     (Longident.t Asttypes.loc * Parsetree.core_type) list *
       Parsetree.module_type
+
+(* hack *)
+type policy = Fixed | Extensible | Univars
+val transl_type: Env.t -> policy -> Parsetree.core_type -> Typedtree.core_type
+val hacked_ptyp_arrow:
+  (((Env.t ->
+    policy ->
+    Asttypes.arg_label ->
+    Parsetree.core_type ->
+    Parsetree.core_type ->
+    Typedtree.core_type) as 'a)
+    -> 'a)
+  ref
+
