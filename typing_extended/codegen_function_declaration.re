@@ -7,6 +7,7 @@ type config = {
   free_variables: list(loc(string)),
   mod_name: loc(string),
   modtype_name: loc(string),
+  run_name: loc(string),
 };
 
 let pattern_match_eq = (config, body) => {
@@ -77,9 +78,20 @@ let transform_function = (config, body) => {
     );
   let exp_fun =
     pexp_fun(~loc, Nolabel, None, module_parameter(config, all_types), body);
-  all_types
-  |> List.fold_left(
-       (expr, name) => pexp_newtype(~loc=name.loc, name, expr),
-       exp_fun,
-     );
+  let exp_fun =
+    all_types
+    |> List.fold_left(
+         (expr, name) => pexp_newtype(~loc=name.loc, name, expr),
+         exp_fun,
+       );
+  pexp_record(
+    ~loc=config.run_name.loc,
+    [
+      (
+        {txt: Lident(config.run_name.txt), loc: config.run_name.loc},
+        exp_fun,
+      ),
+    ],
+    None,
+  );
 };

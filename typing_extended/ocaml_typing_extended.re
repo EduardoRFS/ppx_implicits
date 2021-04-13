@@ -23,18 +23,29 @@ module Env_stack = {
   let last_modtype = ref(0);
   type data = {
     binding_loc: Location.t,
-    source_env: Env.t,
+    mutable source_env: Env.t,
     scope: int,
     // TODO: they need to be ordered
-    mutable modtypes:
-      list((Typedtree.module_type_declaration, Types.modtype_declaration)),
+    mutable additional_structures:
+      list(
+        [
+          | `Modtype(
+              Typedtree.module_type_declaration,
+              Types.modtype_declaration,
+            )
+          | `Type(Typedtree.type_declaration, Types.type_declaration)
+        ],
+      ),
   };
   type t = Stack.t(data);
 
   let stack = Stack.create();
 
   let push = (~scope, binding_loc, source_env) =>
-    Stack.push({scope, binding_loc, source_env, modtypes: []}, stack);
+    Stack.push(
+      {scope, binding_loc, source_env, additional_structures: []},
+      stack,
+    );
   let append_modtype = (~loc, signature, env) => {
     let data = Stack.top(stack);
     let name = Printf.sprintf("HKT_Magic_%d", last_modtype^);
@@ -42,6 +53,7 @@ module Env_stack = {
     // copied from transl_modtype_decl_aux
     let tmty =
       Typetexp.transl_modtype^(
+        // TODO: I think it shouldn't always be on source_env
         data.source_env,
         {
           pmty_desc: Pmty_signature(signature),
@@ -55,8 +67,17 @@ module Env_stack = {
       mtd_loc: loc,
       mtd_uid: Types.Uid.mk(~current_unit=Env.get_unit_name()),
     };
-    let (id, env) =
-      Env.enter_modtype(~scope=data.scope, name, modtype_decl, env);
+    let (id, source_env) =
+      Env.enter_modtype(
+        ~scope=data.scope,
+        name,
+        modtype_decl,
+        data.source_env,
+      );
+    /* this is important so that the next expression on this same structure
+       can see all the types and modtypes */
+    data.source_env = source_env;
+    let env = Env.add_modtype(id, modtype_decl, env);
     let tree_modtype_decl = {
       mtd_id: id,
       mtd_name: {
@@ -67,42 +88,93 @@ module Env_stack = {
       mtd_attributes: [],
       mtd_loc: loc,
     };
-    data.modtypes = [(tree_modtype_decl, modtype_decl), ...data.modtypes];
+    data.additional_structures = [
+      `Modtype((tree_modtype_decl, modtype_decl)),
+      ...data.additional_structures,
+    ];
     (env, name);
   };
+  Printexc.record_backtrace(true);
+  let append_type = (~loc, free_variables, wrapper_modtype, env) => {
+    let data = Stack.top(stack);
+    let id = last_modtype^;
+    incr(last_modtype);
+
+    let (decl, label_decl) =
+      Codegen_wrapper_record.make_wrapper_record(
+        ~loc,
+        ~id,
+        ~wrapper_modtype,
+        ~free_variables,
+      );
+    let run_name = label_decl.pld_name;
+
+    let id = Ident.create_scoped(~scope=data.scope, decl.ptype_name.txt);
+    let uid = Types.Uid.mk(~current_unit=Env.get_unit_name());
+    // Format.printf(
+    //   "%a\n%!",
+    //   Pprintast.structure,
+    //   [{pstr_loc: loc, pstr_desc: Pstr_type(Nonrecursive, [decl])}],
+    // );
+    // TODO: this seems like a bad idea, if it mess with the scope
+    let decl = Typedecl.transl_declaration(data.source_env, decl, (id, uid));
+    let typ = decl.typ_type;
+    data.source_env = Env.add_type(~check=true, id, typ, data.source_env);
+    let env = Env.add_type(~check=true, id, typ, env);
+    data.additional_structures = [
+      `Type((decl, typ)),
+      ...data.additional_structures,
+    ];
+    (env, run_name);
+  };
+
   let pop = (desc, desc_signature, env) => {
     let data = Stack.pop(stack);
-    if (data.modtypes == []) {
+    if (data.additional_structures == []) {
       (desc, desc_signature, env);
     } else {
-      let modtypes = List.rev(data.modtypes);
+      let additional_structures = List.rev(data.additional_structures);
       let env =
         List.fold_left(
-          (env, ({mtd_id, _}, modtype)) =>
-            // TODO: what happens if double add
-            Env.add_modtype(mtd_id, modtype, env),
+          (env, type_entry) =>
+            switch (type_entry) {
+            // TODO: add vs enter
+            | `Modtype({mtd_id, _}, modtype) =>
+              Env.add_modtype(mtd_id, modtype, env)
+            | `Type({typ_id, _}, typ) =>
+              Env.add_type(~check=false, typ_id, typ, env)
+            },
+          // TODO: what happens if double add?
           env,
-          modtypes,
+          additional_structures,
         );
       // TODO: is it okay to use the final env for all of them?
-      let modtypes_declarations =
+      let additional_declarations =
         List.map(
-          ((modtype, _)) =>
-            {
+          fun
+          | `Modtype(modtype, _) => {
               str_desc: Tstr_modtype(modtype),
               str_loc: modtype.mtd_loc,
               str_env: env,
+            }
+          | `Type(typdecl, _) => {
+              str_desc: Tstr_type(Nonrecursive, [typdecl]),
+              str_loc: typdecl.typ_loc,
+              str_env: env,
             },
-          modtypes,
+          additional_structures,
         );
       let structure =
-        modtypes_declarations
+        additional_declarations
         @ [{str_desc: desc, str_loc: data.binding_loc, str_env: env}];
       let signature =
         List.map(
-          (({mtd_id, _}, modtype)) =>
-            Types.Sig_modtype(mtd_id, modtype, Exported),
-          modtypes,
+          fun
+          | `Modtype({mtd_id, _}, modtype) =>
+            Types.Sig_modtype(mtd_id, modtype, Exported)
+          | `Type({typ_id, _}, typ) =>
+            Types.Sig_type(typ_id, typ, Trec_not, Exported),
+          additional_structures,
         )
         @ desc_signature;
       let modexpr = {
@@ -216,6 +288,13 @@ let hack_pexp_fun =
 
     let (env, modtype_name) =
       Env_stack.append_modtype(~loc=modtype_loc, signature, env);
+    let (env, run_name) =
+      Env_stack.append_type(
+        ~loc=modtype_loc,
+        free_variables,
+        modtype_name,
+        env,
+      );
     let fn =
       Codegen_function_declaration.transform_function(
         {
@@ -228,6 +307,7 @@ let hack_pexp_fun =
             txt: modtype_name,
             loc: modtype_loc,
           },
+          run_name,
         },
         sbody,
       );
@@ -351,6 +431,11 @@ Typecore.hacked_texp_pack :=
       );
     }
   );
+
+// types
+
+Typetexp.hacked_ptyp_arrow :=
+  ((f, env, policy, label, st1, st2) => f(env, policy, label, st1, st2));
 
 // expression type recovery
 let hacked_type_expect = (f, env, sexp, ty_expected) => {
