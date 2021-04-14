@@ -6,9 +6,9 @@
    -w
    -9
    -open
-   Ppx_let_locs_ocaml_utils
+   Ppx_implicits_ocaml_utils
    -open
-   Ppx_let_locs_ocaml_stdlib))
+   Ppx_implicits_ocaml_stdlib))
  (libraries
   ocaml-compiler-libs.common
   ocaml-migrate-parsetree
