@@ -1,5 +1,0 @@
-(library
- (name ocaml_typing)
- (public_name ppx_implicits.ocaml_typing)
- (libraries compiler-libs.common)
- (flags -w "-9"))
