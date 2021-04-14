@@ -1,0 +1,6 @@
+(library
+ (name ppx_implicits_ocaml_stdlib)
+ (public_name ppx_implicits.ocaml.stdlib)
+ (libraries ocaml-migrate-parsetree)
+ (preprocess
+  (pps ppx_optcomp)))

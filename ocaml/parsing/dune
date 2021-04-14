@@ -1,0 +1,16 @@
+(library
+ (name ppx_implicits_ocaml_parsing)
+ (public_name ppx_implicits.ocaml.parsing)
+ (flags
+  (:standard
+   -w
+   -9
+   -open
+   Ppx_let_locs_ocaml_utils
+   -open
+   Ppx_let_locs_ocaml_stdlib))
+ (libraries
+  ocaml-compiler-libs.common
+  ocaml-migrate-parsetree
+  ppx_implicits_ocaml_utils
+  ppx_implicits_ocaml_stdlib))

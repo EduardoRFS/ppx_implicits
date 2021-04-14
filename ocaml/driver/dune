@@ -1,0 +1,20 @@
+(library
+ (name ppx_implicits_ocaml_driver)
+ (public_name ppx_implicits.ocaml.driver)
+ (flags
+  (:standard
+   -w
+   -9
+   -open
+   Ppx_let_locs_ocaml_utils
+   -open
+   Ppx_let_locs_ocaml_stdlib
+   -open
+   Ppx_let_locs_ocaml_parsing
+   -open
+   Ppx_let_locs_ocaml_typing))
+ (libraries
+  ppx_implicits_ocaml_utils
+  ppx_implicits_ocaml_stdlib
+  ppx_implicits_ocaml_parsing
+  ppx_implicits_ocaml_typing))
