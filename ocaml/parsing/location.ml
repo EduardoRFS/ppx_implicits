@@ -629,14 +629,14 @@ type msg = (Format.formatter -> unit) loc
 let msg ?(loc = none) fmt =
   Format.kdprintf (fun txt -> { loc; txt }) fmt
 
-type report_kind =
+type report_kind = Ocaml_common.Location.report_kind =
   | Report_error
   | Report_warning of string
   | Report_warning_as_error of string
   | Report_alert of string
   | Report_alert_as_error of string
 
-type report = {
+type report = Ocaml_common.Location.report = {
   kind : report_kind;
   main : msg;
   sub : msg list;
@@ -891,24 +891,11 @@ let deprecated ?def ?use loc message =
 (******************************************************************************)
 (* Reporting errors on exceptions *)
 
-let error_of_exn : (exn -> error option) list ref = ref []
-
-let register_error_of_exn f = error_of_exn := f :: !error_of_exn
+let register_error_of_exn f = Ocaml_common.Location.register_error_of_exn f
 
 exception Already_displayed_error = Warnings.Errors
 
-let error_of_exn exn =
-  match exn with
-  | Already_displayed_error -> Some `Already_displayed
-  | _ ->
-     let rec loop = function
-       | [] -> None
-       | f :: rest ->
-          match f exn with
-          | Some error -> Some (`Ok error)
-          | None -> loop rest
-     in
-     loop !error_of_exn
+let error_of_exn exn = Ocaml_common.Location.error_of_exn exn
 
 let () =
   register_error_of_exn

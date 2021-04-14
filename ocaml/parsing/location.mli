@@ -124,14 +124,14 @@ type msg = (Format.formatter -> unit) loc
 
 val msg: ?loc:t -> ('a, Format.formatter, unit, msg) format4 -> 'a
 
-type report_kind =
+type report_kind = Ocaml_common.Location.report_kind =
   | Report_error
   | Report_warning of string
   | Report_warning_as_error of string
   | Report_alert of string
   | Report_alert_as_error of string
 
-type report = {
+type report = Ocaml_common.Location.report = {
   kind : report_kind;
   main : msg;
   sub : msg list;
