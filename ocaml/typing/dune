@@ -13,6 +13,9 @@
    -open
    Ppx_implicits_ocaml_parsing))
  (libraries
+  ocaml-migrate-types
   ppx_implicits_ocaml_utils
   ppx_implicits_ocaml_stdlib
-  ppx_implicits_ocaml_parsing))
+  ppx_implicits_ocaml_parsing)
+ (preprocess
+  (pps ppx_optcomp)))
