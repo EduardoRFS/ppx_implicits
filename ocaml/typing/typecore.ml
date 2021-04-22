@@ -2414,8 +2414,7 @@ let create_package_type loc env (p, l) =
   let fields = List.map (fun (name, ct) ->
                            name, Typetexp.transl_simple_type env false ct) l in
   let ty = newty (Tpackage (s,
-                    List.map fst l,
-                   List.map (fun (_, cty) -> cty.ctyp_type) fields))
+                   List.map (fun (n, cty) -> (n, cty.ctyp_type)) fields))
   in
    (s, fields, ty)
 
@@ -3575,25 +3574,25 @@ and type_expect_
             exp_extra =
             (Texp_newtype name, loc, sexp.pexp_attributes) :: body.exp_extra }
   | Pexp_pack m ->
-      let (p, nl) =
+      let (p, fl) =
         match Ctype.expand_head env (instance ty_expected) with
-          {desc = Tpackage (p, nl, _tl)} ->
+          {desc = Tpackage (p, fl)} ->
             if !Clflags.principal &&
               (Ctype.expand_head env ty_expected).level < Btype.generic_level
             then
               Location.prerr_warning loc
                 (Warnings.Not_principal "this module packing");
-            (p, nl)
+            (p, fl)
         | {desc = Tvar _} ->
             raise (Error (loc, env, Cannot_infer_signature))
         | _ ->
             raise (Error (loc, env, Not_a_packed_module ty_expected))
       in
-      let (modl, tl') = !type_package env m p nl in
+      let (modl, fl') = !type_package env m p fl in
       rue {
         exp_desc = Texp_pack modl;
         exp_loc = loc; exp_extra = [];
-        exp_type = newty (Tpackage (p, nl, tl'));
+        exp_type = newty (Tpackage (p, fl'));
         exp_attributes = sexp.pexp_attributes;
         exp_env = env }
   | Pexp_open (od, e) ->
