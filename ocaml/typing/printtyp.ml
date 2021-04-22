@@ -541,7 +541,10 @@ and raw_type_desc ppf = function
               fprintf ppf "Some(@,%a,@,%a)" path p raw_type_list tl)
   | Tpackage (p, fl) ->
       fprintf ppf "@[<hov1>Tpackage(@,%a@,%a)@]" path p
-        raw_type_list (List.map snd fl)
+        raw_package_field_list fl
+and raw_package_field ppf (n, ty) =
+  fprintf ppf "%a=%a" longident n raw_type ty
+and raw_package_field_list ppf fl = raw_list raw_package_field ppf fl
 and raw_row_fixed ppf = function
 | None -> fprintf ppf "None"
 | Some Types.Fixed_private -> fprintf ppf "Some Fixed_private"
